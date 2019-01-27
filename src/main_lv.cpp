@@ -109,8 +109,15 @@ int main(int argc, char * argv[])
   ros::Publisher pub_vt = node.advertise<ratslam_ros::ViewTemplate>(topic_root + "/LocalView/Template", 0);
 
   image_transport::ImageTransport it(node);
-  image_transport::Subscriber sub = it.subscribe(topic_root + "/camera/image", 0, boost::bind(image_callback, _1, &pub_vt));
-
+  //CHR - BEGIN
+//  image_transport::Subscriber sub = it.subscribe(topic_root + "/camera/image", 0, boost::bind(image_callback, _1, &pub_vt));
+  image_transport::Subscriber sub;
+  if (!topic_root.compare("nao")){
+    sub = it.subscribe("/nao_robot/camera/top/camera/image_raw", 0, boost::bind(image_callback, _1, &pub_vt));
+  } else {
+    sub = it.subscribe(topic_root + "/camera/image", 0, boost::bind(image_callback, _1, &pub_vt));
+  }
+  //CHR - END
 
 #ifdef HAVE_IRRLICHT
     boost::property_tree::ptree draw_settings;

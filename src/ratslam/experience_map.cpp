@@ -70,7 +70,7 @@ ExperienceMap::~ExperienceMap()
 }
 
 // create a new experience for a given position 
-int ExperienceMap::on_create_experience(unsigned int exp_id)
+int ExperienceMap::on_create_experience(unsigned int exp_id, bool create_link) //CHR create_link
 {
 
   experiences.resize(experiences.size() + 1);
@@ -93,11 +93,23 @@ int ExperienceMap::on_create_experience(unsigned int exp_id)
   new_exp->goal_to_current = -1;
   new_exp->current_to_goal = -1;
 
-  if (experiences.size() != 1)
+  if (experiences.size() != 1 && create_link) //CHR
     on_create_link(get_current_id(), experiences.size() - 1, 0);
 
   return experiences.size() - 1;
 }
+
+//CHR - BEGIN
+void ExperienceMap::set_exp_distance(int id, double x_m, double y_m)
+{
+  experiences[id].dist = sqrt(pow((experiences[id].x_m - x_m),2) + pow((experiences[id].y_m - y_m),2));
+}
+
+double ExperienceMap::get_exp_distance(int id)
+{
+  return experiences[id].dist;
+}
+//CHR - END
 
 // update the current position of the experience map
 // since the last experience

@@ -93,10 +93,26 @@ int main(int argc, char * argv[])
   }
   ros::NodeHandle node;
 
-  pub_vo = node.advertise<nav_msgs::Odometry>(topic_root + "/odom", 0);
+  //CHR - BEGIN
+  //pub_vo = node.advertise<nav_msgs::Odometry>(topic_root + "/odom", 0);
+  if (!topic_root.compare("nao")){
+    pub_vo = node.advertise<nav_msgs::Odometry>("/odom", 0);
+  } else {
+    pub_vo = node.advertise<nav_msgs::Odometry>(topic_root + "/odom", 0);
+  }
+  //CHR - END
 
   image_transport::ImageTransport it(node);
-  image_transport::Subscriber sub = it.subscribe(topic_root + "/camera/image", 1, image_callback);
+
+  //CHR - BEGIN
+  //image_transport::Subscriber sub = it.subscribe(topic_root + "/camera/image", 1, image_callback);
+  image_transport::Subscriber sub;
+  if (!topic_root.compare("nao")){
+	  image_transport::Subscriber sub = it.subscribe("/nao_robot/camera/top/camera/image_raw", 1, image_callback);
+  } else {
+ 	 image_transport::Subscriber sub = it.subscribe(topic_root + "/camera/image", 1, image_callback);
+  }
+  //CHR - END
 
   ros::spin();
 

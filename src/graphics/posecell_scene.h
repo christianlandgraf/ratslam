@@ -170,7 +170,8 @@ public:
   void update_scene()
   {
     update_pose_cells(posecells->posecells_memory, posecells->PC_DIM_XY, posecells->PC_DIM_TH);
-    update_position(posecells->best_x, posecells->best_y, posecells->best_th, posecells->PC_DIM_XY, posecells->PC_DIM_TH);
+    update_position(posecells->best_x[0], posecells->best_y[0], posecells->best_th[0], posecells->PC_DIM_XY, posecells->PC_DIM_TH); //CHR
+    //update_position(posecells->best_x, posecells->best_y, posecells->best_th, posecells->PC_DIM_XY, posecells->PC_DIM_TH);
   }
 
   void clear_history()

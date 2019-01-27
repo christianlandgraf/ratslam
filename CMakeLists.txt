@@ -2,14 +2,14 @@ cmake_minimum_required(VERSION 2.8.3)
 project(ratslam_ros)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake)
-
+add_compile_options(-std=c++11) #CHR
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS message_generation std_msgs roscpp sensor_msgs nav_msgs tf visualization_msgs image_transport nav_msgs) ## actionlib_msgs)
 
-find_package(OpenCV)
+find_package(OpenCV 2) #CHR
 include_directories(${OpenCV_INCLUDE_DIRS})
 find_package(Boost REQUIRED COMPONENTS serialization)
 find_package(Irrlicht REQUIRED)
@@ -74,7 +74,8 @@ target_link_libraries(ratslam_lv
   ratslam
   ${IRRLICHT_LIBRARIES}
   ${OPENGL_LIBRARIES}
-  ${OpenCV_LIBRARIES})
+  #${OpenCV_LIBRARIES}
+)
 
 add_executable(ratslam_pc src/main_pc.cpp)
 target_link_libraries(ratslam_pc
@@ -96,7 +97,8 @@ target_link_libraries(ratslam_vo
   ratslam
   ${IRRLICHT_LIBRARIES}
   ${OPENGL_LIBRARIES}
-  ${OpenCV_LIBRARIES})
+  #${OpenCV_LIBRARIES}
+)
 
 #config files for devel
 set(MEDIA_PATH ${CMAKE_CURRENT_SOURCE_DIR}/src/media) #devel use the files in the source dir

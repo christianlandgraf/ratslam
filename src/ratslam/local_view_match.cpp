@@ -138,7 +138,7 @@ void LocalViewMatch::convert_view_to_view_template(bool grayscale)
   int y_block_size = sub_range_y / TEMPLATE_Y_SIZE;
   int pos;
 
-  for (unsigned int i; i < current_view.size(); i++)
+  for (unsigned int i = 0; i < current_view.size(); i++) //CHR = 0
     current_view[i] = 0;
 
   if (grayscale)

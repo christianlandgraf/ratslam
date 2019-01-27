@@ -38,7 +38,7 @@ using namespace std;
 #include <ratslam_ros/TopologicalAction.h>
 #include <nav_msgs/Odometry.h>
 #include <ratslam_ros/ViewTemplate.h>
-
+#include <irrlicht/quaternion.h> //CHR
 
 #if HAVE_IRRLICHT
 #include "graphics/posecell_scene.h"
@@ -48,30 +48,80 @@ bool use_graphics;
 
 using namespace ratslam;
 
-ratslam_ros::TopologicalAction pc_output;
+ratslam_ros::TopologicalAction *pc_output;
+
+int EXP_MAP_NUM; //CHR
+bool is_nao = false; //CHR
+int turn = 0; //CHR
 
 void odo_callback(nav_msgs::OdometryConstPtr odo, ratslam::PosecellNetwork *pc, ros::Publisher * pub_pc)
 {
   ROS_DEBUG_STREAM("PC:odo_callback{" << ros::Time::now() << "} seq=" << odo->header.seq << " v=" << odo->twist.twist.linear.x << " r=" << odo->twist.twist.angular.z);
 
   static ros::Time prev_time(0);
+  //CHR - BEGIN
+  //Convert position into velocity (using the quaternion implementation)
+  double vtrans = 0, vrot = 0;
+  static double prev_x = 0, prev_y = 0, prev_angle = 0;
+  double curr_angle = 0;
+  irr::core::quaternion irr_quaternion = irr::core::quaternion((float) odo->pose.pose.orientation.x, (float) odo->pose.pose.orientation.y,
+                                   (float) odo->pose.pose.orientation.z, (float) odo->pose.pose.orientation.w);
+  irr::core::vector3df vector3df;
+  //CHR - END
 
   if (prev_time.toSec() > 0)
   {
     double time_diff = (odo->header.stamp - prev_time).toSec();
 
-    pc_output.src_id = pc->get_current_exp_id();
-    pc->on_odo(odo->twist.twist.linear.x, odo->twist.twist.angular.z, time_diff);
-    pc_output.action = pc->get_action();
-    if (pc_output.action != ratslam::PosecellNetwork::NO_ACTION)
-    {
-      pc_output.header.stamp = ros::Time::now();
-      pc_output.header.seq++;
-      pc_output.dest_id = pc->get_current_exp_id();
-	  pc_output.relative_rad = pc->get_relative_rad();
-      pub_pc->publish(pc_output);
-      ROS_DEBUG_STREAM("PC:action_publish{odo}{" << ros::Time::now() << "} action{" << pc_output.header.seq << "}=" <<  pc_output.action << " src=" << pc_output.src_id << " dest=" << pc_output.dest_id);
+    //CHR - BEGIN
+    if (is_nao) {
+      //euclidean distance between current and previous position
+      vtrans = (sqrt(pow(odo->pose.pose.position.x - prev_x,2) + pow(odo->pose.pose.position.y - prev_y, 2))) / time_diff;
+      irr_quaternion.toEuler(vector3df);
+      curr_angle = vector3df.Z;
+      //difference between angles
+      vrot = (curr_angle - prev_angle) / time_diff;
+      pc->on_odo(vtrans, vrot, time_diff);
+    } else {
+      pc->on_odo(odo->twist.twist.linear.x, odo->twist.twist.angular.z, time_diff);
     }
+    //get all topological actions and save them in an array
+    int first = -1,last = 0;
+    pc_output = new ratslam_ros::TopologicalAction[EXP_MAP_NUM];
+    for(int em_id=0; em_id < EXP_MAP_NUM; em_id++) {
+      pc_output[em_id].action = pc->get_action(em_id);
+      pc_output[em_id].src_id = pc->get_current_prev_id();
+      if (pc_output[em_id].action != ratslam::PosecellNetwork::NO_ACTION) {
+        if (first == -1){
+          first = em_id;
+        }
+        last = em_id;
+        pc_output[em_id].em_id = em_id;
+        pc_output[em_id].header.stamp = ros::Time::now();
+        pc_output[em_id].header.seq++;
+        pc_output[em_id].dest_id = pc->get_current_dest_id(em_id);
+        pc_output[em_id].relative_rad = pc->get_relative_rad();
+      }
+    }
+
+    //publish the topological actions except for the "No_action" messages, to reduce traffic
+    for(int em_id=0; em_id < EXP_MAP_NUM; em_id++) {
+      if (pc_output[em_id].action != ratslam::PosecellNetwork::NO_ACTION){
+        if (first == em_id){
+          pc_output[em_id].first = 1;
+        }
+        if (last == em_id){
+          pc_output[em_id].last = 1;
+        }
+        pub_pc->publish(pc_output[em_id]);
+
+        ROS_DEBUG_STREAM("PC:action_publish{odo}{" << ros::Time::now() << "} action{" << pc_output[em_id].header.seq << "}="
+                                                   << pc_output[em_id].action << " src=" << pc_output[em_id].src_id << " dest="
+                                                   << pc_output[em_id].dest_id);
+
+      }
+    }
+    //CHR - END
 
 
 #ifdef HAVE_IRRLICHT
@@ -81,8 +131,16 @@ void odo_callback(nav_msgs::OdometryConstPtr odo, ratslam::PosecellNetwork *pc, 
 		pcs->draw_all();
 	}
 #endif
+
   }
   prev_time = odo->header.stamp;
+  //CHR - BEGIN
+  if (is_nao) {
+    prev_x = odo->pose.pose.position.x;
+    prev_y = odo->pose.pose.position.y;
+    prev_angle = curr_angle;
+  }
+  //CHR - END
 }
 
 void template_callback(ratslam_ros::ViewTemplateConstPtr vt, ratslam::PosecellNetwork *pc, ros::Publisher * pub_pc)
@@ -119,6 +177,7 @@ int main(int argc, char * argv[])
   get_setting_child(ratslam_settings, settings, "ratslam", true);
   get_setting_child(general_settings, settings, "general", true);
   get_setting_from_ptree(topic_root, general_settings, "topic_root", (std::string) "");
+  get_setting_from_ptree(EXP_MAP_NUM, ratslam_settings, "exp_map_num",1); //CHR
 
   if (!ros::isInitialized())
   {
@@ -128,11 +187,22 @@ int main(int argc, char * argv[])
 
 
 
+  //one PoseCellNetworks with n position hypotheses (one for each experience map)
   ratslam::PosecellNetwork * pc = new ratslam::PosecellNetwork(ratslam_settings);
   ros::Publisher pub_pc = node.advertise<ratslam_ros::TopologicalAction>(topic_root + "/PoseCell/TopologicalAction", 0);
 
-  ros::Subscriber sub_odometry = node.subscribe<nav_msgs::Odometry>(topic_root + "/odom", 0, boost::bind(odo_callback, _1, pc, &pub_pc), ros::VoidConstPtr(),
-                                                                    ros::TransportHints().tcpNoDelay());
+  //CHR - BEGIN
+  ros::Subscriber sub_odometry;
+  if (!topic_root.compare("nao")){
+    is_nao = true;
+  	sub_odometry = node.subscribe<nav_msgs::Odometry>("/odom", 0, boost::bind(odo_callback, _1, pc, &pub_pc), ros::VoidConstPtr(),
+     	                                                               ros::TransportHints().tcpNoDelay());
+  } else {
+  	sub_odometry = node.subscribe<nav_msgs::Odometry>(topic_root + "/odom", 0, boost::bind(odo_callback, _1, pc, &pub_pc), ros::VoidConstPtr(),
+   	                                                                 ros::TransportHints().tcpNoDelay());
+  }
+  //CHR - END
+	
   ros::Subscriber sub_template = node.subscribe<ratslam_ros::ViewTemplate>(topic_root + "/LocalView/Template", 0, boost::bind(template_callback, _1, pc, &pub_pc),
                                                                            ros::VoidConstPtr(), ros::TransportHints().tcpNoDelay());
 #ifdef HAVE_IRRLICHT

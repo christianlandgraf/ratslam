@@ -58,13 +58,24 @@ PosecellNetwork::PosecellNetwork(ptree settings)
   get_setting_from_ptree(EXP_DELTA_PC_THRESHOLD, settings, "exp_delta_pc_threshold", 2.0);
 
   get_setting_from_ptree(PC_VT_RESTORE, settings, "pc_vt_restore", 0.05);
+  //CHR - BEGIN
+  get_setting_from_ptree(EXP_MAP_NUM, settings, "exp_map_num", 1);
+  //array of position hypotheses
+  best_x = new double[EXP_MAP_NUM];
+  best_y = new double[EXP_MAP_NUM];
+  best_th = new double[EXP_MAP_NUM];
 
-  // the starting position within the posecell network
-  best_x = floor((double)PC_DIM_XY / 2.0);
-  best_y = floor((double)PC_DIM_XY / 2.0);
-  best_th = floor((double)PC_DIM_TH / 2.0);
+  dest_exp = new unsigned int[EXP_MAP_NUM];
+  for (int l=0;l<EXP_MAP_NUM;l++){
+    dest_exp[l] = 0;
 
-  current_exp = 0;
+    // the starting position within the posecell network
+    best_x[l] = floor((double)PC_DIM_XY / 2.0);
+    best_y[l] = floor((double)PC_DIM_XY / 2.0);
+    best_th[l] = floor((double)PC_DIM_TH / 2.0);
+  }
+  //current_exp = 0;
+  //CHR - END
   current_vt = 0;
 
   pose_cell_builder();
@@ -124,7 +135,7 @@ void PosecellNetwork::pose_cell_builder()
   PC_W_EXCITE = (double *)malloc(sizeof(double) * PC_W_E_DIM * PC_W_E_DIM * PC_W_E_DIM);
   PC_W_INHIB = (double *)malloc(sizeof(double) * PC_W_I_DIM * PC_W_I_DIM * PC_W_I_DIM);
 
-  posecells[(int)best_th][(int)best_y][(int)best_x] = 1;
+  posecells[(int) best_th[0]][(int) best_y[0]][(int) best_x[0]] = 1; //CHR
 
   // set up the wrap lookups
   PC_W_E_DIM_HALF = (int)floor((double)PC_W_E_DIM / 2.0);
@@ -235,6 +246,12 @@ PosecellNetwork::~PosecellNetwork()
   free(PC_TH_SUM_COS_LOOKUP);
   free(posecells_memory);
   free(pca_new_memory);
+  //CHR - BEGIN
+  free(dest_exp);
+  free(best_x);
+  free(best_y);
+  free(best_th);
+  //CHR - END
 }
 
 bool PosecellNetwork::inject(int act_x, int act_y, int act_z, double energy)
@@ -546,118 +563,155 @@ bool PosecellNetwork::path_integration(double vtrans, double vrot)
   return true;
 }
 
+//CHR - BEGIN
+//is used in find_best(), to sort array keeping track of original indexes
+typedef std::pair<double,int> pair;
+bool comparator ( const pair& l, const pair& r)
+{ return l.first > r.first; }
+//CHR - END
+
 double PosecellNetwork::find_best()
 {
   int i, j, k;
-  double x = -1, y = -1, th = -1;
+  //CHR - BEGIN
+  double *x = new double[EXP_MAP_NUM], *y = new double[EXP_MAP_NUM], *th = new double[EXP_MAP_NUM];
+  for (int l=0; l < EXP_MAP_NUM; l++){
+    x[l] = -1; y[l] = -1; th[l] = -1;
+  }
+  //CHR - END
 
   double * x_sums, *y_sums, *z_sums;
   double sum_x1, sum_x2, sum_y1, sum_y2;
 
   // % find the max activated cell
-  double max = 0;
+  //CHR - BEGIN
+  //return best n instead of only the best
+  //double max = 0;
+  double max[EXP_MAP_NUM] = {0};
+  int * max_index = new int[EXP_MAP_NUM];
+  int index;
+  //CHR - END
   for (k = 0; k < PC_DIM_TH; k++)
   {
     for (j = 0; j < PC_DIM_XY; j++)
     {
       for (i = 0; i < PC_DIM_XY; i++)
       {
-        if (posecells[k][j][i] > max)
+        //CHR - BEGIN
+        //if activity bigger than in the smallest element, replace worst position hypothesis
+        //if (posecells[k][j][i] > max)
+        if (posecells[k][j][i] > *std::min_element(max,max+EXP_MAP_NUM))
         {
-          max = posecells[k][j][i];
-          x = (double)i;
-          y = (double)j;
-          th = (double)k;
+          //max = posecells[k][j][i];
+          index = (int) (std::min_element(max, max + EXP_MAP_NUM) - max); //Get index of min element
+          max[index] = posecells[k][j][i];
+          x[index] = (double)i;
+          y[index] = (double)j;
+          th[index] = (double)k;
+        }
+        //CHR - END
+      }
+    }
+  }
+
+  //CHR - BEGIN
+  //sort array descending and keep indexes
+  std::vector<pair> max_pair;
+  for (int l=0; l< EXP_MAP_NUM; l++){
+    max_pair.push_back(pair(max[l],l));
+  }
+  std::sort(max_pair.begin(),max_pair.begin()+EXP_MAP_NUM,comparator);
+  for (int l=0; l < EXP_MAP_NUM; l++){
+    max_index[l] = max_pair[l].second;
+  }
+  //CHR - END
+
+  for (int l=0; l < EXP_MAP_NUM; l++) { //CHR
+    //  % take the max activated cell +- AVG_CELL in 3d space
+    //  % get the sums for each axis
+    memset(pca_new_memory, 0, posecells_memory_size);
+
+    x_sums = pca_new[0][0];
+    y_sums = pca_new[1][0];
+    z_sums = pca_new[2][0];
+
+    for (k = (int) th[max_index[l]]; k < th[max_index[l]] + PC_CELLS_TO_AVG * 2 + 1; k++) //CHR [max_index[l]]
+    {
+      for (j = (int) y[max_index[l]]; j < y[max_index[l]] + PC_CELLS_TO_AVG * 2 + 1; j++) //CHR [max_index[l]]
+      {
+        for (i = (int) x[max_index[l]]; i < x[max_index[l]] + PC_CELLS_TO_AVG * 2 + 1; i++) //CHR [max_index[l]]
+        {
+          // pca_new[PC_AVG_TH_WRAP[k]][PC_AVG_XY_WRAP[j]][PC_AVG_XY_WRAP[i]] =
+          //  posecells[PC_AVG_TH_WRAP[k]][PC_AVG_XY_WRAP[j]][PC_AVG_XY_WRAP[i]];
+
+          z_sums[PC_AVG_TH_WRAP[k]] += posecells[PC_AVG_TH_WRAP[k]][PC_AVG_XY_WRAP[j]][PC_AVG_XY_WRAP[i]];
+          y_sums[PC_AVG_XY_WRAP[j]] += posecells[PC_AVG_TH_WRAP[k]][PC_AVG_XY_WRAP[j]][PC_AVG_XY_WRAP[i]];
+          x_sums[PC_AVG_XY_WRAP[i]] += posecells[PC_AVG_TH_WRAP[k]][PC_AVG_XY_WRAP[j]][PC_AVG_XY_WRAP[i]];
         }
       }
     }
-  }
 
-  //  % take the max activated cell +- AVG_CELL in 3d space
-  //  % get the sums for each axis
-  memset(pca_new_memory, 0, posecells_memory_size);
-
-  x_sums = pca_new[0][0];
-  y_sums = pca_new[1][0];
-  z_sums = pca_new[2][0];
-
-  for (k = (int)th; k < th + PC_CELLS_TO_AVG * 2 + 1; k++)
-  {
-    for (j = (int)y; j < y + PC_CELLS_TO_AVG * 2 + 1; j++)
-    {
-      for (i = (int)x; i < x + PC_CELLS_TO_AVG * 2 + 1; i++)
-      {
-        // pca_new[PC_AVG_TH_WRAP[k]][PC_AVG_XY_WRAP[j]][PC_AVG_XY_WRAP[i]] =
-        //  posecells[PC_AVG_TH_WRAP[k]][PC_AVG_XY_WRAP[j]][PC_AVG_XY_WRAP[i]];
-
-        z_sums[PC_AVG_TH_WRAP[k]] += posecells[PC_AVG_TH_WRAP[k]][PC_AVG_XY_WRAP[j]][PC_AVG_XY_WRAP[i]];
-        y_sums[PC_AVG_XY_WRAP[j]] += posecells[PC_AVG_TH_WRAP[k]][PC_AVG_XY_WRAP[j]][PC_AVG_XY_WRAP[i]];
-        x_sums[PC_AVG_XY_WRAP[i]] += posecells[PC_AVG_TH_WRAP[k]][PC_AVG_XY_WRAP[j]][PC_AVG_XY_WRAP[i]];
-      }
+    //  % now find the (x, y, th) using population vector decoding to handle the wrap around
+    sum_x1 = 0;
+    sum_x2 = 0;
+    sum_y1 = 0;
+    sum_y2 = 0;
+    for (i = 0; i < PC_DIM_XY; i++) {
+      sum_x1 += PC_XY_SUM_SIN_LOOKUP[i] * x_sums[i];
+      sum_x2 += PC_XY_SUM_COS_LOOKUP[i] * x_sums[i];
+      sum_y1 += PC_XY_SUM_SIN_LOOKUP[i] * y_sums[i];
+      sum_y2 += PC_XY_SUM_COS_LOOKUP[i] * y_sums[i];
     }
-  }
 
-  //  % now find the (x, y, th) using population vector decoding to handle the wrap around
-  sum_x1 = 0;
-  sum_x2 = 0;
-  sum_y1 = 0;
-  sum_y2 = 0;
-  for (i = 0; i < PC_DIM_XY; i++)
-  {
-    sum_x1 += PC_XY_SUM_SIN_LOOKUP[i] * x_sums[i];
-    sum_x2 += PC_XY_SUM_COS_LOOKUP[i] * x_sums[i];
-    sum_y1 += PC_XY_SUM_SIN_LOOKUP[i] * y_sums[i];
-    sum_y2 += PC_XY_SUM_COS_LOOKUP[i] * y_sums[i];
-  }
+    x[max_index[l]] = atan2(sum_x1, sum_x2) * (PC_DIM_XY) / (2.0 * M_PI) - 1.0; //CHR [max_index[l]]
+    while (x[max_index[l]] < 0) //CHR [max_index[l]]
+    {
+      x[max_index[l]] += PC_DIM_XY; //CHR [max_index[l]]
+    }
+    while (x[max_index[l]] > PC_DIM_XY) //CHR [max_index[l]]
+    {
+      x[max_index[l]] -= PC_DIM_XY; //CHR [max_index[l]]
+    }
 
-  x = atan2(sum_x1, sum_x2) * (PC_DIM_XY) / (2.0 * M_PI) - 1.0;
-  while (x < 0)
-  {
-    x += PC_DIM_XY;
-  }
-  while (x > PC_DIM_XY)
-  {
-    x -= PC_DIM_XY;
-  }
+    y[max_index[l]] = atan2(sum_y1, sum_y2) * (PC_DIM_XY) / (2.0 * M_PI) - 1.0; //CHR [max_index[l]]
+    while (y[max_index[l]] < 0) //CHR [max_index[l]]
+    {
+      y[max_index[l]] += PC_DIM_XY; //CHR [max_index[l]]
+    }
 
-  y = atan2(sum_y1, sum_y2) * (PC_DIM_XY) / (2.0 * M_PI) - 1.0;
-  while (y < 0)
-  {
-    y += PC_DIM_XY;
-  }
+    while (y[max_index[l]] > PC_DIM_XY) //CHR [max_index[l]]
+    {
+      y[max_index[l]] -= PC_DIM_XY; //CHR [max_index[l]]
+    }
 
-  while (y > PC_DIM_XY)
-  {
-    y -= PC_DIM_XY;
-  }
+    sum_x1 = 0;
+    sum_x2 = 0;
+    for (i = 0; i < PC_DIM_TH; i++) {
+      sum_x1 += PC_TH_SUM_SIN_LOOKUP[i] * z_sums[i];
+      sum_x2 += PC_TH_SUM_COS_LOOKUP[i] * z_sums[i];
+    }
+    th[max_index[l]] = atan2(sum_x1, sum_x2) * (PC_DIM_TH) / (2.0 * M_PI) - 1.0; //CHR [max_index[l]]
+    while (th[max_index[l]] < 0) //CHR [max_index[l]]
+    {
+      th[max_index[l]] += PC_DIM_TH; //CHR [max_index[l]]
+    }
+    while (th[max_index[l]] > PC_DIM_TH) //CHR [max_index[l]]
+    {
+      th[max_index[l]] -= PC_DIM_TH; //CHR [max_index[l]]
+    }
 
-  sum_x1 = 0;
-  sum_x2 = 0;
-  for (i = 0; i < PC_DIM_TH; i++)
-  {
-    sum_x1 += PC_TH_SUM_SIN_LOOKUP[i] * z_sums[i];
-    sum_x2 += PC_TH_SUM_COS_LOOKUP[i] * z_sums[i];
-  }
-  th = atan2(sum_x1, sum_x2) * (PC_DIM_TH) / (2.0 * M_PI) - 1.0;
-  while (th < 0)
-  {
-    th += PC_DIM_TH;
-  }
-  while (th > PC_DIM_TH)
-  {
-    th -= PC_DIM_TH;
-  }
+    if (x[max_index[l]] < 0 || y[max_index[l]] < 0 || th[max_index[l]] < 0 ||
+        x[max_index[l]] > PC_DIM_XY || y[max_index[l]] > PC_DIM_XY || th[max_index[l]] > PC_DIM_TH) //CHR [max_index[l]]
+    {
+      cout << "ERROR: " << x[max_index[l]] << ", " << y[max_index[l]] << ", " << th[max_index[l]] << " out of range" << endl; //CHR [max_index[l]]
+    }
 
-  if (x < 0 || y < 0 || th < 0 || x > PC_DIM_XY || y > PC_DIM_XY || th > PC_DIM_TH)
-  {
-    cout << "ERROR: " << x << ", " << y << ", " << th << " out of range" << endl;
-  }
+    best_x[l] = x[max_index[l]]; //CHR
+    best_y[l] = y[max_index[l]]; //CHR
+    best_th[l] = th[max_index[l]]; //CHR
+  } //CHR
 
-  best_x = x;
-  best_y = y;
-  best_th = th;
-
-  return max;
+  return max[max_index[0]]; //CHR
 }
 
 double * PosecellNetwork::get_cells(void)
@@ -673,14 +727,14 @@ bool PosecellNetwork::set_cells(double * cells)
     return false;
 }
 
-double PosecellNetwork::get_delta_pc(double x, double y, double th)
+double PosecellNetwork::get_delta_pc(int em_id, double x, double y, double th) //CHR em_id
 {
-  double pc_th_corrected = best_th - vt_delta_pc_th;
+  double pc_th_corrected = best_th[em_id] - vt_delta_pc_th; //CHR
   if (pc_th_corrected < 0) 
 	pc_th_corrected = PC_DIM_TH + pc_th_corrected;
   if (pc_th_corrected >= PC_DIM_TH)
 	pc_th_corrected = pc_th_corrected - PC_DIM_TH;
-  return sqrt(pow(get_min_delta(best_x, x, PC_DIM_XY), 2) + pow(get_min_delta(best_y, y, PC_DIM_XY), 2) + pow(get_min_delta(pc_th_corrected, th, PC_DIM_TH), 2));
+  return sqrt(pow(get_min_delta(best_x[em_id], x, PC_DIM_XY), 2) + pow(get_min_delta(best_y[em_id], y, PC_DIM_XY), 2) + pow(get_min_delta(pc_th_corrected, th, PC_DIM_TH), 2)); //CHR
 }
 
 double PosecellNetwork::get_min_delta(double d1, double d2, double max)
@@ -890,27 +944,46 @@ void PosecellNetwork::create_experience()
   experiences.resize(experiences.size() + 1);
   current_exp = experiences.size() - 1;
   PosecellExperience * exp = &experiences[current_exp];
-  exp->x_pc = x();
-  exp->y_pc = y();
-  exp->th_pc = th();
+  //CHR -BEGIN
+  //save each position hypothesis in the experience
+  exp->x_pc = new double[EXP_MAP_NUM];
+  exp->y_pc = new double[EXP_MAP_NUM];
+  exp->th_pc = new double[EXP_MAP_NUM];
+  for (int i=0;i<EXP_MAP_NUM;i++) {
+    exp->x_pc[i] = best_x[i];
+    exp->y_pc[i] = best_y[i];
+    exp->th_pc[i] = best_th[i];
+  }
+  //CHR - END
   exp->vt_id = current_vt;
   pcvt->exps.push_back(current_exp);
 }
 
-
-PosecellNetwork::PosecellAction PosecellNetwork::get_action()
+bool create_exp = false; //CHR
+PosecellNetwork::PosecellAction PosecellNetwork::get_action(int em_id) //CHR em_id
 {
-  PosecellExperience * experience;
+  //CHR - BEGIN
+  prev_exp = dest_exp[em_id];
+  //To remember previous action in first run (experiences are only created once!!)
+  //this means: There is one experience with multiple position hypotheses
+  if (em_id == 0){
+    first_action = 0;
+    create_exp = false;
+  }
+  //CHR -END
+  PosecellExperience *experience;
   double delta_pc;
   PosecellAction action = NO_ACTION;
 
   if (odo_update && vt_update)
   {
-    odo_update = false;
-    vt_update = false;
-
+    //do not change before last run
+    if (em_id == EXP_MAP_NUM - 1) { //CHR
+      odo_update = false;
+      vt_update = false;
+    }
   } else {
-	return action;
+    return action;
   }
 
   if (visual_templates.size() == 0)
@@ -921,43 +994,51 @@ PosecellNetwork::PosecellAction PosecellNetwork::get_action()
 
   if (experiences.size() == 0)
   {
-    create_experience();
-    action = CREATE_NODE;
-  } else {
-    experience = &experiences[current_exp];
-
-    delta_pc = get_delta_pc(experience->x_pc, experience->y_pc, experience->th_pc);
-
-    PosecellVisualTemplate * pcvt = &visual_templates[current_vt];
-    if (pcvt->exps.size() == 0)
-    {
+    //do not change until last run
+    if (em_id == EXP_MAP_NUM - 1) { //CHR
       create_experience();
+    }
+    action = CREATE_NODE;
+    dest_exp[em_id] = 0;
+  } else {
+    experience = &experiences[prev_exp]; //CHR current_exp
+
+    //compare to position of previous experiences
+    delta_pc = get_delta_pc(em_id, experience->x_pc[0], experience->y_pc[0], experience->th_pc[0]); //CHR em_id, j/0
+
+    PosecellVisualTemplate *pcvt = &visual_templates[current_vt];
+
+    if (pcvt->exps.size() == 0 || first_action == 1) {
+      if (em_id == 0) { //CHR
+        first_action = 1; //CHR
+        create_experience();
+      }
+      dest_exp[em_id] = experiences.size() - 1; //CHR
       action = CREATE_NODE;
-     }
-    else if (delta_pc > EXP_DELTA_PC_THRESHOLD || current_vt != prev_vt)
-    {
+    } else if (delta_pc > EXP_DELTA_PC_THRESHOLD || current_vt != prev_vt) {
       // go through all the exps associated with the current view and find the one with the closest delta_pc
       int matched_exp_id = -1;
-      unsigned int i;
+      unsigned int i,j; //CHR j
       int min_delta_id = -1;
       double min_delta = DBL_MAX;
       double delta_pc;
 
-    // find the closest experience in pose cell space
+      // find the closest experience in pose cell space
       for (i = 0; i < pcvt->exps.size(); i++)
       {
         // make sure we aren't comparing to the current experience
-        if (current_exp == pcvt->exps[i])
+        if (prev_exp == pcvt->exps[i]) //CHR current_exp
           continue;
 
         experience = &experiences[pcvt->exps[i]];
-        delta_pc = get_delta_pc(experience->x_pc, experience->y_pc, experience->th_pc);
+        for (j = 0; j < EXP_MAP_NUM; j++) { //CHR
+          delta_pc = get_delta_pc(em_id, experience->x_pc[j], experience->y_pc[j], experience->th_pc[j]); //CHR em_id, j
 
-        if (delta_pc < min_delta)
-        {
-          min_delta = delta_pc;
-          min_delta_id = pcvt->exps[i];
-        }
+          if (delta_pc < min_delta) {
+            min_delta = delta_pc;
+            min_delta_id = pcvt->exps[i];
+          }
+        } //CHR
       }
 
       // if an experience is closer than the thres create a link
@@ -965,31 +1046,33 @@ PosecellNetwork::PosecellAction PosecellNetwork::get_action()
       {
         matched_exp_id = min_delta_id;
         action = CREATE_EDGE;
+        //save the destination id
+        dest_exp[em_id] = matched_exp_id; //CHR
       }
 
-      if (current_exp != (unsigned)matched_exp_id)
-      {
-        if (matched_exp_id == -1)
-        {
-          create_experience();
+      if (prev_exp != (unsigned) matched_exp_id) { //CHR current_exp
+        if (matched_exp_id == -1) {
+          create_exp = true;
+          dest_exp[em_id] = experiences.size(); //CHR
           action = CREATE_NODE;
-        }
-        else
-        {
-          current_exp = matched_exp_id;
-          if (action == NO_ACTION)
-          {
+        } else {
+          dest_exp[em_id] = matched_exp_id; //CHR
+          if (action == NO_ACTION) {
             action = SET_NODE;
           }
         }
-      }
-      else if (current_vt == prev_vt)
-      {
-        create_experience();
+      } else if (current_vt == prev_vt) {
+        create_exp = true;
+        dest_exp[em_id] = experiences.size(); //CHR
         action = CREATE_NODE;
       }
     }
   }
+  //CHR - BEGIN
+  if (em_id == EXP_MAP_NUM-1 && create_exp){
+    create_experience();
+  }
+  //CHR - END
 
   return action;
 }
@@ -1013,9 +1096,17 @@ void PosecellNetwork::create_view_template()
   PosecellVisualTemplate * pcvt;
   visual_templates.resize(visual_templates.size() + 1);
   pcvt = &visual_templates[visual_templates.size() - 1];
-  pcvt->pc_x = x();
-  pcvt->pc_y = y();
-  pcvt->pc_th = th();
+  //CHR -BEGIN
+  //link the view template to all position hypotheses
+  pcvt->pc_x = new double[EXP_MAP_NUM];
+  pcvt->pc_y = new double[EXP_MAP_NUM];
+  pcvt->pc_th = new double[EXP_MAP_NUM];
+  for (int i=0;i<EXP_MAP_NUM;i++) {
+    pcvt->pc_x[i] = best_x[i];
+    pcvt->pc_y[i] = best_y[i];
+    pcvt->pc_th[i] = best_th[i];
+  }
+  //CHR - END
   pcvt->decay = VT_ACTIVE_DECAY;
 
 }
@@ -1045,15 +1136,19 @@ void PosecellNetwork::on_view_template(unsigned int vt, double vt_rad)
 
       // this line is magic. ask michael about it
       double energy = PC_VT_INJECT_ENERGY * 1.0 / 30.0 * (30.0 - exp(1.2 * pcvt->decay));
+      //inject energy in all position hypotheses
+      energy = energy/(double) EXP_MAP_NUM; //CHR
       if (energy > 0)
       {
-		vt_delta_pc_th = vt_rad / (2.0*M_PI) * PC_DIM_TH;
-		double pc_th_corrected = pcvt->pc_th + vt_rad / (2.0*M_PI) * PC_DIM_TH;
-		if (pc_th_corrected < 0) 
-			pc_th_corrected = PC_DIM_TH + pc_th_corrected;
-		if (pc_th_corrected >= PC_DIM_TH)
-			pc_th_corrected = pc_th_corrected - PC_DIM_TH;
-        inject((int)pcvt->pc_x, (int)pcvt->pc_y, (int)pc_th_corrected, energy);
+        for(int l=0;l<EXP_MAP_NUM;l++) {
+          vt_delta_pc_th = vt_rad / (2.0 * M_PI) * PC_DIM_TH;
+          double pc_th_corrected = pcvt->pc_th[l] + vt_rad / (2.0*M_PI) * PC_DIM_TH; //CHR
+          if (pc_th_corrected < 0)
+            pc_th_corrected = PC_DIM_TH + pc_th_corrected;
+          if (pc_th_corrected >= PC_DIM_TH)
+            pc_th_corrected = pc_th_corrected - PC_DIM_TH;
+          inject((int) pcvt->pc_x[l], (int) pcvt->pc_y[l], (int) pc_th_corrected, energy); //CHR
+        }
       }
     }
   }

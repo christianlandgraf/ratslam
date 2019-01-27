@@ -90,6 +90,7 @@ struct Experience
   int id; // its own id
 
   double x_m, y_m, th_rad;
+  double dist = 0; //CHR
   int vt_id;
 
   std::vector<unsigned int> links_from; // links from this experience
@@ -105,6 +106,7 @@ struct Experience
     {
       ar & id;
       ar & x_m & y_m & th_rad;
+      ar & dist; //CHR
       ar & vt_id;
       ar & links_from & links_to;
       ar & time_from_current_s;
@@ -125,7 +127,7 @@ public:
   ~ExperienceMap();
 
   // create a new experience for a given position
-  int on_create_experience(unsigned int exp_id);
+  int on_create_experience(unsigned int exp_id, bool create_link); //CHR create_link
   bool on_create_link(int exp_id_from, int exp_id_to, double rel_rad);
 
   Experience *get_experience(int id)
@@ -136,6 +138,11 @@ public:
   {
     return &links[id];
   }
+  //CHR - BEGIN
+  void set_exp_distance(int id, double x_m, double y_m);
+  double get_exp_distance(int id);
+  int counter_ranked_worst = 0;
+  //CHR - END
 
   // update the current position of the experience map
   // since the last experience

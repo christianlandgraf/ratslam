@@ -1,0 +1,16 @@
+
+<launch>
+
+	<machine name="local_alt" address="localhost" default="true" />
+	
+	<node name="RatSLAMLocalViewCells" pkg="ratslam_ros" type="ratslam_lv" args="$(find ratslam_ros)/config/config_nao.txt _image_transport:=raw" cwd="node" required="true"/>
+	<node name="RatSLAMPoseCells" pkg="ratslam_ros" type="ratslam_pc" args="$(find ratslam_ros)/config/config_nao.txt _image_transport:=raw" cwd="node" required="true" output="screen"/>
+	<node name="RatSLAMExperienceMap" pkg="ratslam_ros" type="ratslam_em" args="$(find ratslam_ros)/config/config_nao.txt _image_transport:=raw" cwd="node" required="true" output="screen"/>
+	<!-- <node name="RatSLAMVisualOdometry" pkg="ratslam_ros" type="ratslam_vo" args="$(find ratslam_ros)/config/config_nao.txt _image_transport:=raw" cwd="node" required="true" output="screen"/> -->
+
+	<!-- <node pkg="rqt_plot" type="rqt_plot" name="plot_vt_em" args="/nao/LocalView/Template/current_id,/nao/PoseCell/TopologicalAction/dest_id" /> -->
+	<!-- <node pkg="rosbag" type="record" name="record" args="/nao/ExperienceMap/Map /nao/ExperienceMap/RobotPose /nao/LocalView/Template /nao/PoseCell/TopologicalAction /overhead/pose -O ratslam_out.bag" /> --> 
+ 
+	<!-- <node pkg="image_view" type="image_view" name="overhead" args="image:=/overhead/camera/image _image_transport:=compressed" />  -->
+
+</launch>

@@ -57,7 +57,7 @@ namespace ratslam
 struct PosecellVisualTemplate
 {
         unsigned int id;
-        double pc_x, pc_y, pc_th;
+        double *pc_x, *pc_y, *pc_th; //CHR
         double decay;
         std::vector<unsigned int> exps;
 
@@ -73,7 +73,7 @@ struct PosecellVisualTemplate
 
 struct PosecellExperience {
 
-  double x_pc, y_pc, th_pc;
+  double *x_pc, *y_pc, *th_pc; //CHR *
   int vt_id;
 };
 
@@ -94,20 +94,21 @@ public:
 
   void on_view_template(unsigned int vt, double vt_rad);
 
-  PosecellAction get_action();
+  PosecellAction get_action(int em_id); //CHR em_id
 
   // these updated by find_best()
+  //return best pose hypothesis
   double x()
   {
-    return best_x;
+    return best_x[0]; //CHR [0]
   }
   double y()
   {
-    return best_y;
+    return best_y[0]; //CHR [0]
   }
   double th()
   {
-    return best_th;
+    return best_th[0]; //CHR [0]
   }
 
   // get and set all the cells as one array
@@ -117,7 +118,10 @@ public:
 
   // access to some of the constants specified in
   // RatSLAM properties.
-  double get_delta_pc(double x, double y, double th);
+  double get_delta_pc(int em_id, double x, double y, double th); //CHR em_id
+
+  unsigned int get_current_dest_id(int em_id) { return dest_exp[em_id]; } //CHR
+  unsigned int get_current_prev_id() { return prev_exp; } //CHR
 
   unsigned int get_current_exp_id() { return current_exp; }
 
@@ -133,6 +137,7 @@ public:
       ar & PC_W_E_VAR;
       ar & PC_W_I_VAR;
       ar & PC_GLOBAL_INHIB;
+      ar & EXP_MAP_NUM; //CHR
 
       ar & VT_ACTIVE_DECAY;
       ar & PC_VT_RESTORE;
@@ -159,6 +164,7 @@ public:
       ar & PC_W_E_VAR;
       ar & PC_W_I_VAR;
       ar & PC_GLOBAL_INHIB;
+      ar & EXP_MAP_NUM; //CHR
 
       ar & VT_ACTIVE_DECAY;
       ar & PC_VT_RESTORE;
@@ -235,9 +241,14 @@ private:
 
   double EXP_DELTA_PC_THRESHOLD;
 
-  double best_x;
-  double best_y;
-  double best_th;
+  //CHR - BEGIN
+  int EXP_MAP_NUM;
+  int first_action = 0;
+  //int best_index = 0;
+  double *best_x;
+  double *best_y;
+  double *best_th;
+  //CHR - END
 
   double vt_delta_pc_th;
 
@@ -279,7 +290,8 @@ private:
   std::vector<PosecellExperience> experiences;
 
   unsigned int current_vt, prev_vt;
-  unsigned int current_exp, prev_exp;
+  unsigned int current_exp, prev_exp = 0;//CHR
+  unsigned int *dest_exp; //CHR
 
 };
 

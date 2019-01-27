@@ -5,6 +5,12 @@ uint32 SET_NODE=3
 
 Header header
 
+#CHR - BEGIN
+uint32 em_id
+bool first
+bool last
+#CHR - END
+
 uint32 action
 
 uint32 src_id
