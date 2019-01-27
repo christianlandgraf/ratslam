@@ -21,10 +21,6 @@ In addition to the original code, the repository includes:
 More details to the original OpenRatSLAM implementation can be found [here](https://github.com/davidmball/ratslam/blob/wiki/RatSLAMROS.md).
 The original OpenRatSLAM code was released under the GNU GPL V3.
 
-<br>
-
-Additionally, this fork contains:
-
 ## Installation
 The tests were performed on Ubuntu 16.04 and [ROS Kinetic](http://wiki.ros.org/kinetic/Installation/Ubuntu) (version 1.12.13).
 
@@ -110,20 +106,22 @@ More notes to [OpenRatSLAM](https://github.com/davidmball/ratslam/blob/wiki/RatS
 
 ## Implementation details
 The experimental setup:
-<img src='https://github.com/christianlandgraf/ratslam/edit/ratslam_ros/figures/openratslam.png' alt='OpenRatSLAM'>
-
+<br>
+<img src='https://github.com/christianlandgraf/ratslam/blob/ratslam_ros_nao/figures/openratslam.png' alt='OpenRatSLAM'>
+<br>
 The original RatSLAM was developed for and tested only on wheeled robots.
-Therefore, the following adjustments are necessary:
-	- A new ROS launch file and a new ROS configuration file was created
-	- The Visual Odometry data is not used because the NAO provides odometry data
-	- "image_transport" is set to "raw"
-	- the ROS nodes subscribe to the topics of the NAO ROS package, which publishes the image and odometry data (depending on the NAO version, this needs to be adjusted)
-	- the calculation of the current velocity is adjusted. OpenRatSLAM uses the current translational and rotational speed, but the NAO ROS package provides the current position and rotation (as Quaternion) in space. The Quaternion conversion is done by the "irrlicht" library (Note: The tf C++-library does not work!!).
-	- the multiple pose hypotheses algorithm from [Müller et al.](https://pdfs.semanticscholar.org/f660/8cfde283e07c8e634f9493df654356aa69a8.pdf) is implemented
+Therefore, the following adjustments were done:
+- A new ROS launch file and a new ROS configuration file was created
+- The Visual Odometry data is not used because the NAO provides odometry data
+- "image_transport" is set to "raw"
+- the ROS nodes subscribe to the topics of the NAO ROS package, which publishes the image and odometry data (depending on the NAO version, this needs to be adjusted)
+- the calculation of the current velocity is adjusted. OpenRatSLAM uses the current translational and rotational speed, but the NAO ROS package provides the current position and rotation (as Quaternion) in space. The Quaternion conversion is done by the "irrlicht" library (Note: The tf C++-library does not work!!).
+- the multiple pose hypotheses algorithm from [Müller et al.](https://pdfs.semanticscholar.org/f660/8cfde283e07c8e634f9493df654356aa69a8.pdf) is implemented
 
 The following sequence diagram illustrates the multiple pose hypotheses algorithm:
-<img src='https://github.com/christianlandgraf/ratslam/edit/ratslam_ros/figures/sequencediagram.png' alt='Sequence Diagram'>
-
+<br>
+<img src='https://github.com/christianlandgraf/ratslam/blob/ratslam_ros_nao/figures/sequencediagram.png' alt='Sequence Diagram'>
+<br>
 
 ## Results
 
