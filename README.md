@@ -112,7 +112,7 @@ More notes to [OpenRatSLAM](https://github.com/davidmball/ratslam/blob/wiki/RatS
 ## Implementation details
 The experimental setup:
 <br>
-<img src='https://github.com/christianlandgraf/ratslam/blob/ratslam_ros/figures/openratslam.png' alt='OpenRatSLAM'>
+<img src='./figures/openratslam.png' alt='OpenRatSLAM'>
 <br>
 The original RatSLAM was developed for and tested only on wheeled robots.
 Therefore, the following adjustments are necessary:<br>
@@ -125,7 +125,7 @@ Therefore, the following adjustments are necessary:<br>
 
 The following sequence diagram illustrates the multiple pose hypotheses algorithm:
 <br>
-<img src='https://github.com/christianlandgraf/ratslam/blob/ratslam_ros/figures/sequencediagram.png' alt='Sequence Diagram'>
+<img src='./figures/sequencediagram.png' alt='Sequence Diagram'>
 <br>
 
 ## Results
